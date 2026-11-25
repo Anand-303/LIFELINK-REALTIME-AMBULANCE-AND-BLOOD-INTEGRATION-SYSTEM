@@ -20,27 +20,30 @@ dotenv.config();
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
+// CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.CLIENT_URL || 'http://localhost:3000'
+    : [
+        process.env.CLIENT_URL,
+        'http://localhost:3000',
+        'http://localhost:3001',
+      ].filter((o): o is string => Boolean(o)),
+  credentials: true,
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Create HTTP server
 const server = http.createServer(app);
 
-// Socket.io CORS: in development allow common localhost ports (CRA may use 3001 if 3000 is taken)
-const socketCorsOrigins =
-  process.env.NODE_ENV === 'production'
-    ? process.env.CLIENT_URL || 'http://localhost:3000'
-    : [
-        process.env.CLIENT_URL,
-        'http://localhost:3000',
-        'http://localhost:3001',
-      ].filter((o): o is string => Boolean(o));
-
+// Socket.io CORS uses same origins as Express
 const io = new Server(server, {
   cors: {
-    origin: socketCorsOrigins,
+    origin: corsOptions.origin,
     methods: ['GET', 'POST'],
   },
 });
@@ -60,8 +63,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Health check endpoint
-app.get('/api/status', (req: Request, res: Response) => {
+// Health check endpoint (standard /api/health for Render/Heroku compatibility)
+app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     message: 'Server is running',
