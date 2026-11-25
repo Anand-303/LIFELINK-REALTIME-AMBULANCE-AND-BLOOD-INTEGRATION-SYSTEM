@@ -4,6 +4,8 @@ export interface IAmbulanceRequest extends Document {
   user: mongoose.Types.ObjectId;
   patientName: string;
   patientPhone?: string;
+  needsBlood?: boolean;
+  urgency?: 'low' | 'medium' | 'critical';
   pickupLocation: {
     address: string;
     latitude: number;
@@ -17,6 +19,8 @@ export interface IAmbulanceRequest extends Document {
   status: 'pending' | 'accepted' | 'in-progress' | 'completed' | 'cancelled';
   ambulance?: mongoose.Types.ObjectId;
   emergencyDetails?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const ambulanceRequestSchema = new Schema<IAmbulanceRequest>(
@@ -34,6 +38,15 @@ const ambulanceRequestSchema = new Schema<IAmbulanceRequest>(
     patientPhone: {
       type: String,
       trim: true,
+    },
+    needsBlood: {
+      type: Boolean,
+      default: false,
+    },
+    urgency: {
+      type: String,
+      enum: ['low', 'medium', 'critical'],
+      default: 'medium',
     },
     pickupLocation: {
       address: {

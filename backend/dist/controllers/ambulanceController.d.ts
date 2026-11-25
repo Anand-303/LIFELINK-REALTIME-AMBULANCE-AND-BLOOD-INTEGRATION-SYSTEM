@@ -40,17 +40,35 @@ export declare const requestAmbulance: (req: Request, res: Response) => Promise<
  * @route GET /api/ambulance/request/:id
  * @access Private
  */
-export declare const getAmbulanceRequestById: (req: Request, res: Response) => Promise<void>;
+export declare const getAmbulanceRequestById: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Update ambulance request status
  * @route PUT /api/ambulance/request/:id/status
  * @access Private
  */
-export declare const updateAmbulanceRequestStatus: (req: Request, res: Response) => Promise<void>;
+export declare const updateAmbulanceRequestStatus: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get user's ambulance requests
  * @route GET /api/ambulance/request/user
  * @access Private
  */
 export declare const getUserAmbulanceRequests: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Get all ambulance requests (Admin only)
+ * @route GET /api/ambulance/request/all
+ * @access Private/Admin
+ */
+export declare const getAllAmbulanceRequests: (req: Request, res: Response) => Promise<void>;
+/**
+ * Allocate a specific ambulance to a request (Admin)
+ * @route PUT /api/ambulance/request/:id/allocate
+ * @access Private/Admin
+ */
+export declare const allocateAmbulanceToRequest: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Delete an ambulance (Admin only)
+ * @route DELETE /api/ambulance/:id
+ * @access Private/Admin
+ */
+export declare const deleteAmbulance: (req: Request, res: Response) => Promise<void>;
 //# sourceMappingURL=ambulanceController.d.ts.map

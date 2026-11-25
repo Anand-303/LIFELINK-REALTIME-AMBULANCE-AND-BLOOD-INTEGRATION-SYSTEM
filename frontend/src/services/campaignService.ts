@@ -32,8 +32,8 @@ export const createCampaign = async (
   description: string,
   location: {
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude?: number;
+    longitude?: number;
   },
   startDate: Date,
   endDate: Date,
@@ -65,8 +65,8 @@ export const updateCampaign = async (
     description?: string;
     location?: {
       address: string;
-      latitude: number;
-      longitude: number;
+      latitude?: number;
+      longitude?: number;
     };
     startDate?: Date;
     endDate?: Date;

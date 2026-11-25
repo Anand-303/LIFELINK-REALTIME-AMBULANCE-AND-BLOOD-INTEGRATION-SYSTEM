@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GoogleMap } from '@react-google-maps/api';
 import Grid from '../../components/CustomGrid';
-import { Container, Paper, Typography, Box, Button, TextField, FormControl, InputLabel, Select, MenuItem, FormHelperText, Divider, List, ListItem, ListItemText, ListItemIcon, Avatar, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, CircularProgress, Card, CardContent, CardActions, Chip, useTheme, useMediaQuery, Alert, Snackbar } from '@mui/material';
+import { Container, Paper, Typography, Box, Button, TextField, Divider, List, ListItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress, Chip, MenuItem, Alert, Snackbar } from '@mui/material';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 
 import LocationMap from '../../components/LocationMap';
 import { useAppSelector } from '../../redux/hooks';
-import api, { ambulanceService } from '../../services/api';
+import { ambulanceService } from '../../services/api';
 import { Ambulance, AmbulanceRequest } from '../../types';
 import { useSocket } from '../../hooks/useSocket';
 import { useGoogleMaps } from '../../hooks/useGoogleMaps';
@@ -21,33 +20,16 @@ interface MapLocation {
   status: 'available' | 'busy' | 'offline' | undefined;
 }
 
-// Map container style
-const mapContainerStyle = {
-  width: '100%',
-  height: '500px',
-};
-
-// Map options
-const mapOptions = {
-  disableDefaultUI: true,
-  zoomControl: true,
-  streetViewControl: true,
-  mapTypeControl: true,
-};
-
 const AmbulanceTrackingPage: React.FC = () => {
   // Initialize hooks at the top level
   const { user } = useAppSelector(state => state.auth);
   const isMounted = useRef(true);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Use the centralized Google Maps hook
   const { 
     isLoaded: mapsLoaded, 
     loadError: mapsError, 
     currentLocation, 
-    getCurrentLocation,
     getAddressFromCoordinates
   } = useGoogleMaps();
   
@@ -69,17 +51,19 @@ const AmbulanceTrackingPage: React.FC = () => {
   // Custom hooks
   const { socket, subscribeToAmbulanceUpdates } = useSocket();
   
-  // Get user location with better error handling
-  const requestUserLocation = useCallback(() => {
+  // Get user location with better error handling and fallback strategy
+  const requestUserLocation = useCallback((useHighAccuracy: boolean = true, retryCount: number = 0) => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser.');
+      setLoading(false);
       return;
     }
 
+    // Try high accuracy first, fall back to lower accuracy if it times out
     const options: PositionOptions = {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0, // Always get fresh location
+      enableHighAccuracy: useHighAccuracy,
+      timeout: useHighAccuracy ? 30000 : 20000, // Longer timeout for high accuracy
+      maximumAge: useHighAccuracy ? 0 : 60000, // Accept cached location if not using high accuracy
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -94,18 +78,26 @@ const AmbulanceTrackingPage: React.FC = () => {
         setLocationError(null);
         setLoading(false);
       },
-      (error) => {
+      (error: GeolocationPositionError) => {
         console.error('Error getting location:', error);
+        
+        // If timeout with high accuracy, retry with lower accuracy (only once)
+        if (error.code === 3 && useHighAccuracy && retryCount === 0) {
+          console.log('High accuracy timed out, retrying with lower accuracy...');
+          requestUserLocation(false, 1);
+          return;
+        }
+        
         let errorMessage = 'Unable to get your location. ';
         switch (error.code) {
-          case error.PERMISSION_DENIED:
+          case 1: // PERMISSION_DENIED
             errorMessage += 'Please allow location access in your browser settings.';
             break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information is unavailable.';
+          case 2: // POSITION_UNAVAILABLE
+            errorMessage += 'Location information is unavailable. Please check your device settings.';
             break;
-          case error.TIMEOUT:
-            errorMessage += 'Location request timed out. Please try again.';
+          case 3: // TIMEOUT
+            errorMessage += 'Location request timed out. Please try again or check your GPS signal.';
             break;
           default:
             errorMessage += 'An unknown error occurred.';
@@ -118,6 +110,11 @@ const AmbulanceTrackingPage: React.FC = () => {
     );
   }, []);
 
+  // Handler for button click - properly typed for React onClick
+  const handleRequestLocation = useCallback(() => {
+    requestUserLocation();
+  }, [requestUserLocation]);
+
   // Watch user location for real-time updates
   const watchUserLocation = useCallback(() => {
     if (!navigator.geolocation) return;
@@ -129,8 +126,8 @@ const AmbulanceTrackingPage: React.FC = () => {
 
     const options: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 5000, // Accept cached location if less than 5 seconds old
+      timeout: 30000, // Increased timeout for watch position
+      maximumAge: 10000, // Accept cached location if less than 10 seconds old
     };
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -161,10 +158,11 @@ const AmbulanceTrackingPage: React.FC = () => {
     }
 
     if (mapsLoaded) {
-      // Request initial location
+      // Request initial location (this is async, so don't set loading to false here)
       requestUserLocation();
       // Start watching for location updates
       watchUserLocation();
+      // Set loading to false once maps are loaded (location will come later)
       setLoading(false);
     }
 
@@ -192,12 +190,27 @@ const AmbulanceTrackingPage: React.FC = () => {
   const [patientPhone, setPatientPhone] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
   const [requestDetails, setRequestDetails] = useState('');
+  const [needsBlood, setNeedsBlood] = useState(false);
+  const [urgency, setUrgency] = useState<'low' | 'medium' | 'critical'>('medium');
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(false);
   const [userRequests, setUserRequests] = useState<AmbulanceRequest[]>([]);
-  
-  // Refs
-  const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Utility: fail fast instead of hanging forever (geocoding / network)
+  const withTimeout = useCallback(<T,>(promise: Promise<T>, ms: number, timeoutMessage: string) => {
+    return new Promise<T>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error(timeoutMessage)), ms);
+      promise
+        .then((value) => {
+          window.clearTimeout(timer);
+          resolve(value);
+        })
+        .catch((err) => {
+          window.clearTimeout(timer);
+          reject(err);
+        });
+    });
+  }, []);
   
   // Load ambulances
   const loadAmbulances = useCallback(async () => {
@@ -209,7 +222,7 @@ const AmbulanceTrackingPage: React.FC = () => {
       setError('Failed to load ambulances. Please try again.');
       setAmbulances([]); // Ensure ambulances is always an array
     }
-  }, [user]);
+  }, []);
   
   // Load user requests
   const loadUserRequests = useCallback(async () => {
@@ -314,26 +327,52 @@ const AmbulanceTrackingPage: React.FC = () => {
         Ambulance Tracking
       </Typography>
       
-      <Grid container spacing={4}>
-        {/* Map Section */}
-        <Grid item xs={12} md={8} component="div" sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Paper sx={{ p: 2, mb: 3, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Ambulance Tracking
+      <Grid container spacing={3} alignItems="flex-start">
+        {/* Left: small Book Ambulance box (like the mock) */}
+        <Grid item xs={12} md={3} component="div">
+          <Paper elevation={3} sx={{ p: 2, maxWidth: 260 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              Book Ambulance
             </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              fullWidth
+              startIcon={<DirectionsCarIcon />}
+              onClick={() => setOpenRequestDialog(true)}
+              sx={{ borderRadius: 2, py: 1 }}
+            >
+              Book Now
+            </Button>
+          </Paper>
+        </Grid>
+
+        {/* Right: big Map box */}
+        <Grid item xs={12} md={9} component="div">
+          <Paper elevation={3} sx={{ p: 2 }}>
             {locationError && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
+              <Alert 
+                severity="warning" 
+                sx={{ mb: 2 }}
+                action={
+                  <Button 
+                    size="small" 
+                    onClick={() => {
+                      setLocationError(null);
+                      setLoading(true);
+                      requestUserLocation();
+                    }}
+                    disabled={loading}
+                    sx={{ ml: 2 }}
+                  >
+                    {loading ? 'Locating...' : 'Try Again'}
+                  </Button>
+                }
+              >
                 {locationError}
-                <Button 
-                  size="small" 
-                  onClick={requestUserLocation}
-                  sx={{ ml: 2 }}
-                >
-                  Try Again
-                </Button>
               </Alert>
             )}
-            <Box sx={{ height: '70vh', borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
+            <Box sx={{ height: { xs: '45vh', md: '55vh' }, borderRadius: 1, overflow: 'hidden' }}>
               <LocationMap
                 center={userLocation || center}
                 zoom={userLocation ? 15 : 10}
@@ -388,7 +427,7 @@ const AmbulanceTrackingPage: React.FC = () => {
               color="primary"
               fullWidth
               startIcon={<MyLocationIcon />}
-              onClick={requestUserLocation}
+              onClick={handleRequestLocation}
               sx={{ mb: 1, borderRadius: '20px' }}
             >
               {userLocation ? 'Update My Location' : 'Get My Location'}
@@ -411,28 +450,6 @@ const AmbulanceTrackingPage: React.FC = () => {
                 )}
               </Box>
             )}
-          </Paper>
-        </Grid>
-        
-        {/* Action Section */}
-        <Grid item xs={12} md={4} component="div" sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Paper elevation={3} sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" gutterBottom>
-              Request Ambulance
-            </Typography>
-            <Typography variant="body2" color="textSecondary" paragraph>
-              Need emergency medical transportation? Request an ambulance to your location.
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              startIcon={<DirectionsCarIcon />}
-              onClick={() => setOpenRequestDialog(true)}
-              sx={{ mt: 2 }}
-            >
-              Request Now
-            </Button>
           </Paper>
         </Grid>
         
@@ -555,6 +572,32 @@ const AmbulanceTrackingPage: React.FC = () => {
                 onChange={(e) => setDestinationAddress(e.target.value)}
                 margin="normal"
               />
+
+              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={needsBlood}
+                  onChange={(e) => setNeedsBlood(e.target.checked)}
+                  style={{ marginRight: 8 }}
+                  id="needs-blood"
+                />
+                <label htmlFor="needs-blood">Need blood with the ambulance (optional)</label>
+              </Box>
+
+              <TextField
+                select
+                label="Urgency (optional)"
+                fullWidth
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value as any)}
+                margin="normal"
+                helperText="How critical is the situation?"
+              >
+                <MenuItem value="low">Low</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="critical">Critical</MenuItem>
+              </TextField>
+
               <TextField
                 label="Additional Details"
                 fullWidth
@@ -579,8 +622,17 @@ const AmbulanceTrackingPage: React.FC = () => {
             onClick={async () => {
               try {
                 setRequestLoading(true);
-                if (!patientName || !requestLocation && !requestUseCurrentLocation) {
+                // Validate required fields (use parentheses to avoid precedence bugs)
+                if (!patientName || (!requestLocation && !requestUseCurrentLocation)) {
                   setError('Please provide patient name and pickup location.');
+                  setRequestLoading(false);
+                  return;
+                }
+
+                // Backend route is protected; fail fast with a clear message
+                const token = localStorage.getItem('token');
+                if (!token) {
+                  setError('You must be logged in to request an ambulance.');
                   setRequestLoading(false);
                   return;
                 }
@@ -589,7 +641,12 @@ const AmbulanceTrackingPage: React.FC = () => {
                 let pickupAddress = requestLocation;
                 let pickupLatLng: { lat: number; lng: number } | null = null;
 
-                if (requestUseCurrentLocation && userLocation) {
+                if (requestUseCurrentLocation) {
+                  if (!userLocation) {
+                    setError('Current location is not available. Click "Get My Location" first, or enter a full pickup address.');
+                    setRequestLoading(false);
+                    return;
+                  }
                   pickupLatLng = userLocation;
                   if (!pickupAddress && getAddressFromCoordinates) {
                     try {
@@ -605,23 +662,36 @@ const AmbulanceTrackingPage: React.FC = () => {
                 } else {
                   // Geocode typed address
                   try {
+                    if (!(window as any).google?.maps?.Geocoder) {
+                      throw new Error('Google Maps is not loaded. Please wait for the map to load, then try again.');
+                    }
                     const geocoder = new (window as any).google.maps.Geocoder();
-                    const results = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
-                      geocoder.geocode(
-                        { address: requestLocation },
-                        (res: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
-                          if (status === 'OK' && res) resolve(res);
-                          else reject(status);
-                        }
-                      );
-                    });
+                    const results = await withTimeout(
+                      new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+                        geocoder.geocode(
+                          { address: requestLocation },
+                          (res: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
+                            if (status === 'OK' && res) resolve(res);
+                            else reject(new Error(`Geocoding failed: ${status}`));
+                          }
+                        );
+                      }),
+                      10000,
+                      'Geocoding timed out. Please check your internet connection and try again.'
+                    );
                     if (results && results[0] && results[0].geometry) {
                       const loc = results[0].geometry.location;
                       pickupLatLng = { lat: loc.lat(), lng: loc.lng() };
                       pickupAddress = results[0].formatted_address || pickupAddress;
                     }
-                  } catch (e) {
-                    // If geocoding fails, continue with no coords
+                  } catch (e: any) {
+                    // Pickup is required (backend needs lat/lng). Show the real reason to the user.
+                    const message =
+                      e?.message ||
+                      'Could not find that pickup address. Please enter a more specific address (include city), or enable "Use my current map location".';
+                    setError(message);
+                    setRequestLoading(false);
+                    return;
                   }
                 }
 
@@ -630,16 +700,23 @@ const AmbulanceTrackingPage: React.FC = () => {
                 if (destinationAddress) {
                   destinationPayload = { address: destinationAddress };
                   try {
+                    if (!(window as any).google?.maps?.Geocoder) {
+                      throw new Error('Google Maps is not loaded. Please wait for the map to load, then try again.');
+                    }
                     const geocoder = new (window as any).google.maps.Geocoder();
-                    const results = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
-                      geocoder.geocode(
-                        { address: destinationAddress },
-                        (res: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
-                          if (status === 'OK' && res) resolve(res);
-                          else reject(status);
-                        }
-                      );
-                    });
+                    const results = await withTimeout(
+                      new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+                        geocoder.geocode(
+                          { address: destinationAddress },
+                          (res: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
+                            if (status === 'OK' && res) resolve(res);
+                            else reject(new Error(`Geocoding failed: ${status}`));
+                          }
+                        );
+                      }),
+                      10000,
+                      'Destination geocoding timed out. Please try again.'
+                    );
                     if (results && results[0] && results[0].geometry) {
                       const loc = results[0].geometry.location;
                       destinationPayload.latitude = loc.lat();
@@ -658,24 +735,34 @@ const AmbulanceTrackingPage: React.FC = () => {
                 }
 
                 // Submit request
-                await ambulanceService.createAmbulanceRequest({
-                  patientName,
-                  patientPhone,
-                  pickupLocation: {
-                    address: pickupAddress,
-                    latitude: pickupLatLng.lat,
-                    longitude: pickupLatLng.lng,
-                  },
-                  destination: destinationPayload,
-                  emergencyDetails: requestDetails,
-                });
+                await withTimeout(
+                  ambulanceService.createAmbulanceRequest({
+                    patientName,
+                    patientPhone,
+                    needsBlood,
+                    urgency,
+                    pickupLocation: {
+                      address: pickupAddress,
+                      latitude: pickupLatLng.lat,
+                      longitude: pickupLatLng.lng,
+                    },
+                    destination: destinationPayload,
+                    emergencyDetails: requestDetails,
+                  }),
+                  15000,
+                  'Request timed out. Make sure the backend server is running and try again.'
+                );
 
                 setRequestSuccess(true);
-                setOpenRequestDialog(false);
                 await loadUserRequests();
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Error submitting request:', err);
-                setError('Failed to submit request. Please try again.');
+                const message =
+                  err?.response?.data?.message ||
+                  err?.response?.data?.error ||
+                  err?.message ||
+                  'Failed to submit request. Please try again.';
+                setError(message);
               } finally {
                 setRequestLoading(false);
               }

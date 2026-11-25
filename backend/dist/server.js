@@ -14,7 +14,9 @@ const auth_1 = __importDefault(require("./routes/auth"));
 // import userRoutes from './routes/user';
 const ambulance_1 = __importDefault(require("./routes/ambulance"));
 const bloodDonation_1 = __importDefault(require("./routes/bloodDonation"));
+const bloodInventory_1 = __importDefault(require("./routes/bloodInventory"));
 const campaign_1 = __importDefault(require("./routes/campaign"));
+const chat_1 = __importDefault(require("./routes/chat"));
 // Load environment variables
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -44,7 +46,17 @@ io.on('connection', (socket) => {
         console.log('User disconnected:', socket.id);
     });
 });
-// Routes
+// Health check endpoint
+app.get('/api/status', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        message: 'Server is running',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        database: mongoose_1.default.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+});
+// Root endpoint
 app.get('/', (req, res) => {
     res.send('MediConnect API is running');
 });
@@ -53,7 +65,9 @@ app.use('/api/auth', auth_1.default);
 // app.use('/api/users', userRoutes);
 app.use('/api/ambulance', ambulance_1.default);
 app.use('/api/blood-donation', bloodDonation_1.default);
+app.use('/api/blood-inventory', bloodInventory_1.default);
 app.use('/api/campaigns', campaign_1.default);
+app.use('/api', chat_1.default);
 // MongoDB Connection
 mongoose_1.default
     .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mediconnect')

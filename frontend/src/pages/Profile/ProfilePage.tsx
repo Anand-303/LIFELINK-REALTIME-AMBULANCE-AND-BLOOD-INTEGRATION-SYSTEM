@@ -1,5 +1,4 @@
-import React, { useState, useEffect, FC, ReactNode, ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, FC, ReactNode, ChangeEvent } from 'react';
 import Grid from '../../components/CustomGrid';
 import {
   Container,
@@ -16,8 +15,6 @@ import {
   Card,
   CardContent,
   List,
-  ListItem,
-  ListItemText,
   Chip,
   FormControl,
   InputLabel,
@@ -26,7 +23,6 @@ import {
   Tab,
   Tabs
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
 import { 
   Person as PersonIcon,
   LocalHospital as HospitalIcon,
@@ -36,7 +32,7 @@ import {
 } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../../redux/hooks';
 import { updateUserProfile } from '../../redux/slices/authSlice';
-import api, { bloodDonationService, campaignService, ambulanceService } from '../../services/api';
+import { bloodDonationService, campaignService, ambulanceService } from '../../services/api';
 import { AmbulanceRequest, BloodRequest, Campaign } from '../../types';
 
 interface TabPanelProps {
@@ -107,20 +103,13 @@ const ProfilePage: FC = () => {
     }
   }, [user]);
   
-  // Load user activity data
-  useEffect(() => {
-    if (user && tabValue === 1) {
-      loadUserActivity();
-    }
-  }, [user, tabValue]);
-  
   // Handle tab change
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
   
   // Load user activity
-  const loadUserActivity = async () => {
+  const loadUserActivity = useCallback(async () => {
     setLoadingRequests(true);
     try {
       // Load ambulance requests
@@ -143,7 +132,13 @@ const ProfilePage: FC = () => {
     } finally {
       setLoadingRequests(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user && tabValue === 1) {
+      loadUserActivity();
+    }
+  }, [user, tabValue, loadUserActivity]);
   
   // Handle input field changes
   const handleProfileChange = (e: ChangeEvent<HTMLInputElement>) => {

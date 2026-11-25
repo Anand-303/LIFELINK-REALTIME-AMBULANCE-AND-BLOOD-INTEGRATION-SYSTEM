@@ -17,6 +17,7 @@ const LoginPage = React.lazy(() => import('./pages/Auth/LoginPage'));
 const RegisterPage = React.lazy(() => import('./pages/Auth/RegisterPage'));
 const DashboardPage = React.lazy(() => import('./pages/Dashboard/DashboardPage'));
 const AmbulanceTrackingPage = React.lazy(() => import('./pages/Ambulance/AmbulanceTrackingPage'));
+const BookAmbulancePage = React.lazy(() => import('./pages/BookAmbulancePage'));
 const BloodDonationPage = React.lazy(() => import('./pages/Blood/BloodDonationPage'));
 const CampaignsPage = React.lazy(() => import('./pages/Campaigns/CampaignsPage'));
 const ProfilePage = React.lazy(() => import('./pages/Profile/ProfilePage'));
@@ -65,6 +66,7 @@ function App() {
               <Route index element={<HomePage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
+              <Route path="book-ambulance" element={<BookAmbulancePage />} />
               
               {/* Protected routes */}
               <Route path="dashboard" element={

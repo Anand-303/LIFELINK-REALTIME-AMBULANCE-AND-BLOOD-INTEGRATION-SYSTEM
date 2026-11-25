@@ -19,6 +19,7 @@
     "@types/react-dom": "^19.1.8",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.11.0",
+    "cross-env": "^7.0.3",
     "date-fns": "^4.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -30,7 +31,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "cross-env CI=true NODE_OPTIONS=--no-deprecation react-scripts start",
+    "start:alt": "cross-env CI=true NODE_OPTIONS=--no-deprecation PORT=3020 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

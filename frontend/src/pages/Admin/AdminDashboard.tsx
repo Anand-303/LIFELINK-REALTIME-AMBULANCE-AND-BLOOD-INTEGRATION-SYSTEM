@@ -32,9 +32,6 @@ import {
   Card,
   CardContent,
   List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -46,7 +43,6 @@ import {
   Bloodtype as BloodIcon,
   Campaign as CampaignIcon
 } from '@mui/icons-material';
-import { useAppSelector } from '../../redux/hooks';
 import { authService, ambulanceService, bloodDonationService, campaignService } from '../../services/api';
 import { User, Ambulance, BloodRequest, Campaign } from '../../types';
 
@@ -89,7 +85,6 @@ interface BloodInventory {
 }
 
 const AdminDashboard: React.FC = () => {
-  const { user } = useAppSelector(state => state.auth);
   const [tabValue, setTabValue] = useState(0);
   
   // Users state

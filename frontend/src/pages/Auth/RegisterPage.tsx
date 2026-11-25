@@ -22,7 +22,6 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAppDispatch } from '../../redux/hooks';
 import { register } from '../../redux/slices/authSlice';
-import { User } from '../../types';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();

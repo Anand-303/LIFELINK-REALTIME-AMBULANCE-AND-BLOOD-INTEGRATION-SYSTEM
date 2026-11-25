@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Container, 
   Grid, 
@@ -20,13 +20,12 @@ import { Link as RouterLink } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import CampaignIcon from '@mui/icons-material/Campaign';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useAppSelector } from '../../redux/hooks';
 import { AmbulanceRequest, BloodRequest, Campaign } from '../../types';
-import api from '../../services/api';
+import { ambulanceService } from '../../services/api';
 import * as campaignService from '../../services/campaignService';
-import * as ambulanceService from '../../services/ambulanceService';
 import * as bloodDonationService from '../../services/bloodDonationService';
+import LifeLinkMap from '../../components/LifeLinkMap';
 
 const DashboardPage: React.FC = () => {
   const { user, token } = useAppSelector(state => state.auth);
@@ -34,14 +33,18 @@ const DashboardPage: React.FC = () => {
   const [ambulanceRequests, setAmbulanceRequests] = useState<AmbulanceRequest[]>([]);
   const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>([]);
   const [upcomingCampaigns, setUpcomingCampaigns] = useState<Campaign[]>([]);
+  const latestAmbulanceRequest = useMemo(
+    () => (ambulanceRequests && ambulanceRequests.length > 0 ? ambulanceRequests[0] : null),
+    [ambulanceRequests]
+  );
   
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
         // Fetch user's ambulance requests
-        const ambulanceRes = await ambulanceService.getUserAmbulanceRequests(token || '');
-        setAmbulanceRequests(ambulanceRes);
+        const ambulanceRes = await ambulanceService.getUserAmbulanceRequests();
+        setAmbulanceRequests(Array.isArray(ambulanceRes) ? ambulanceRes : []);
         
         // Fetch user's blood requests
         const bloodRes = await bloodDonationService.getUserBloodRequests();
@@ -68,7 +71,7 @@ const DashboardPage: React.FC = () => {
     };
     
     fetchDashboardData();
-  }, []);
+  }, [token]);
   
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -121,6 +124,19 @@ const DashboardPage: React.FC = () => {
                 <Button 
                   component={RouterLink} 
                   to="/ambulance" 
+                  variant="outlined" 
+                  color="primary" 
+                  fullWidth 
+                  startIcon={<DirectionsCarIcon />}
+                  sx={{ mb: 2 }}
+                >
+                  Book Ambulance
+                </Button>
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <Button 
+                  component={RouterLink} 
+                  to="/ambulance" 
                   variant="contained" 
                   color="primary" 
                   fullWidth 
@@ -166,6 +182,30 @@ const DashboardPage: React.FC = () => {
               Your Recent Requests
             </Typography>
             <Divider sx={{ mb: 2 }} />
+
+            {latestAmbulanceRequest && (
+              <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+                  Latest Ambulance Booking
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>Status:</strong> {latestAmbulanceRequest.status}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>Pickup:</strong> {latestAmbulanceRequest.pickupLocation.address}
+                </Typography>
+                {latestAmbulanceRequest.needsBlood != null && (
+                  <Typography variant="body2" sx={{ mb: 0.5 }}>
+                    <strong>Need blood:</strong> {latestAmbulanceRequest.needsBlood ? 'Yes' : 'No'}
+                  </Typography>
+                )}
+                {latestAmbulanceRequest.urgency && (
+                  <Typography variant="body2">
+                    <strong>Urgency:</strong> {latestAmbulanceRequest.urgency}
+                  </Typography>
+                )}
+              </Paper>
+            )}
             
             {ambulanceRequests.length === 0 && bloodRequests.length === 0 ? (
               <Typography variant="body1" color="textSecondary" sx={{ py: 2 }}>
@@ -271,6 +311,19 @@ const DashboardPage: React.FC = () => {
                 View All Campaigns
               </Button>
             </Box>
+          </Paper>
+        </Grid>
+
+        {/* Nearby hospitals map (Life Link) */}
+        <Grid size={{ xs: 12 }}>
+          <Paper elevation={3} sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Nearby hospitals
+            </Typography>
+            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+              Your location and nearby hospitals. Allow location access to center the map and see hospitals.
+            </Typography>
+            <LifeLinkMap height={400} showNearbyHospitals />
           </Paper>
         </Grid>
       </Grid>

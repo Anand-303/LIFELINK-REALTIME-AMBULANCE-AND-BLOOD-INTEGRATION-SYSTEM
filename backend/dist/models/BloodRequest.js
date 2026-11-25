@@ -35,56 +35,50 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const bloodRequestSchema = new mongoose_1.Schema({
-    requester: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-    },
-    patientName: {
-        type: String,
-        required: [true, 'Patient name is required'],
-        trim: true,
-    },
-    patientAge: {
-        type: Number,
-        min: [0, 'Age cannot be negative'],
-    },
+    patientName: { type: String, required: true },
+    patientAge: { type: Number, required: true, min: 1, max: 120 },
     bloodGroup: {
         type: String,
-        enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
-        required: [true, 'Blood group is required'],
+        required: true,
+        enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
     },
-    quantity: {
-        type: Number,
-        required: [true, 'Quantity is required'],
-        min: [1, 'Quantity must be at least 1 unit'],
-    },
-    hospital: {
-        type: String,
-        required: [true, 'Hospital name is required'],
-        trim: true,
-    },
+    units: { type: Number, required: true, min: 1, max: 10 },
+    hospital: { type: String, required: true },
     urgency: {
         type: String,
-        enum: ['normal', 'urgent', 'critical'],
-        default: 'normal',
+        enum: ['low', 'medium', 'high', 'critical'],
+        default: 'medium'
     },
+    contactNumber: { type: String, required: true },
+    reason: String,
     status: {
         type: String,
-        enum: ['pending', 'processing', 'fulfilled', 'cancelled'],
-        default: 'pending',
+        enum: ['pending', 'approved', 'rejected', 'fulfilled', 'cancelled'],
+        default: 'pending'
     },
-    requiredBy: {
-        type: Date,
+    requestedBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
     },
-    medicalNotes: {
-        type: String,
+    processedBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'User'
     },
+    processedAt: Date,
     fulfilledBy: [{
             type: mongoose_1.Schema.Types.ObjectId,
-            ref: 'BloodDonation',
+            ref: 'BloodDonation'
         }],
+    notes: String
 }, { timestamps: true });
-const BloodRequest = mongoose_1.default.model('BloodRequest', bloodRequestSchema);
+// Create model if it doesn't exist
+let BloodRequest;
+if (mongoose_1.default.models.BloodRequest) {
+    BloodRequest = mongoose_1.default.models.BloodRequest;
+}
+else {
+    BloodRequest = mongoose_1.default.model('BloodRequest', bloodRequestSchema);
+}
 exports.default = BloodRequest;
 //# sourceMappingURL=BloodRequest.js.map

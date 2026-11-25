@@ -98,6 +98,8 @@ export const getBloodInventory = async (req: Request, res: Response) => {
 export const updateBloodInventory = async (req: Request, res: Response) => {
   // Decode the blood group parameter (handles URL encoding like A+ -> A%2B)
   const bloodGroupParam = req.params.bloodGroup;
+  console.log('Blood inventory update request:', { bloodGroupParam, body: req.body});
+
   if (!bloodGroupParam) {
     return res.status(400).json({
       success: false,
@@ -107,6 +109,9 @@ export const updateBloodInventory = async (req: Request, res: Response) => {
   const bloodGroup = decodeURIComponent(bloodGroupParam);
   const { units } = req.body;
   const user = req.user as IUser;
+
+  console.log('Decoded blood group:', bloodGroup);
+  console.log('user:', user );
 
   // Check if user is authenticated
   if (!user || !user._id) {

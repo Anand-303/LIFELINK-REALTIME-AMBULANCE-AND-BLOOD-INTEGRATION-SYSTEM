@@ -49,6 +49,15 @@ const ambulanceRequestSchema = new mongoose_1.Schema({
         type: String,
         trim: true,
     },
+    needsBlood: {
+        type: Boolean,
+        default: false,
+    },
+    urgency: {
+        type: String,
+        enum: ['low', 'medium', 'critical'],
+        default: 'medium',
+    },
     pickupLocation: {
         address: {
             type: String,

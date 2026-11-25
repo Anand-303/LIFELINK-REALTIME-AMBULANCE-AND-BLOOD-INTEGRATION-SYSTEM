@@ -1,21 +1,23 @@
 import mongoose, { Document } from 'mongoose';
+import { IUser } from './User';
 export interface IBloodRequest extends Document {
-    requester: mongoose.Types.ObjectId;
     patientName: string;
-    patientAge?: number;
+    patientAge: number;
     bloodGroup: string;
-    quantity: number;
+    units: number;
     hospital: string;
-    urgency: 'normal' | 'urgent' | 'critical';
-    status: 'pending' | 'processing' | 'fulfilled' | 'cancelled';
-    requiredBy?: Date;
-    medicalNotes?: string;
+    urgency: 'low' | 'medium' | 'high' | 'critical';
+    contactNumber: string;
+    reason?: string;
+    status: 'pending' | 'approved' | 'rejected' | 'fulfilled' | 'cancelled';
+    requestedBy: mongoose.Types.ObjectId | IUser;
+    processedBy?: mongoose.Types.ObjectId | IUser;
+    processedAt?: Date;
     fulfilledBy?: mongoose.Types.ObjectId[];
+    notes?: string;
+    createdAt: Date;
+    updatedAt: Date;
 }
-declare const BloodRequest: mongoose.Model<IBloodRequest, {}, {}, {}, mongoose.Document<unknown, {}, IBloodRequest, {}, {}> & IBloodRequest & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+declare let BloodRequest: mongoose.Model<IBloodRequest>;
 export default BloodRequest;
 //# sourceMappingURL=BloodRequest.d.ts.map

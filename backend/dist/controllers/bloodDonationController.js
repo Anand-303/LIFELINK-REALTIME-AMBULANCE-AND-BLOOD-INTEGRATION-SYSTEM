@@ -3,10 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateBloodRequestStatus = exports.getUserBloodRequests = exports.getBloodRequestById = exports.requestBlood = exports.getBloodInventory = exports.recordBloodDonation = exports.getDonors = exports.registerAsDonor = void 0;
+exports.getAllBloodRequests = exports.updateBloodRequestStatus = exports.getUserBloodRequests = exports.getBloodRequestById = exports.requestBlood = exports.getBloodInventory = exports.recordBloodDonation = exports.getDonors = exports.registerAsDonor = void 0;
+const mongoose_1 = require("mongoose");
 const BloodDonation_1 = __importDefault(require("../models/BloodDonation"));
 const BloodRequest_1 = __importDefault(require("../models/BloodRequest"));
 const User_1 = __importDefault(require("../models/User"));
+// Use the same Request type extension from middleware/auth.ts
+// No need to redeclare - it's already declared in auth.ts
 /**
  * Register as a blood donor
  * @route PUT /api/blood-donation/register-donor
@@ -126,70 +129,72 @@ const requestBlood = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authorized' });
         }
-        const { patientName, patientAge, bloodGroup, quantity, hospital, urgency, requiredBy, medicalNotes, } = req.body;
+        if (!req.user._id) {
+            return res.status(401).json({ message: 'User not authenticated' });
+        }
+        const { patientName, patientAge, bloodGroup, units, hospital, urgency = 'medium', contactNumber, reason, } = req.body;
+        // Validate required fields
+        if (!patientName || !patientAge || !bloodGroup || !units || !hospital || !contactNumber) {
+            return res.status(400).json({
+                message: 'Missing required fields: patientName, patientAge, bloodGroup, units, hospital, contactNumber'
+            });
+        }
+        // Convert user._id to ObjectId if it's a string
+        const user = req.user;
+        let requestedById;
+        if (user._id instanceof mongoose_1.Types.ObjectId) {
+            requestedById = user._id;
+        }
+        else {
+            requestedById = new mongoose_1.Types.ObjectId(String(user._id));
+        }
+        // Convert and validate numeric fields
+        const patientAgeNum = Number(patientAge);
+        const unitsNum = Number(units);
+        // Validate data before creating
+        if (isNaN(patientAgeNum) || patientAgeNum < 1 || patientAgeNum > 120) {
+            return res.status(400).json({ message: 'Invalid patient age. Must be between 1 and 120' });
+        }
+        if (isNaN(unitsNum) || unitsNum < 1 || unitsNum > 10) {
+            return res.status(400).json({ message: 'Invalid units. Must be between 1 and 10' });
+        }
         // Create blood request
-        const bloodRequest = await BloodRequest_1.default.create({
-            requester: req.user._id,
-            patientName,
-            patientAge,
-            bloodGroup,
-            quantity,
-            hospital,
-            urgency: urgency || 'normal',
-            requiredBy,
-            medicalNotes,
-        });
-        // Check if there's enough blood in inventory
-        const availableBlood = await BloodDonation_1.default.find({
-            bloodGroup,
-            status: 'available',
-        }).sort({ donationDate: 1 }); // Use oldest blood first
-        let remainingQuantity = quantity;
-        const fulfilledBy = [];
-        // Allocate blood if available
-        for (const donation of availableBlood) {
-            if (remainingQuantity <= 0)
-                break;
-            if (donation.quantity <= remainingQuantity) {
-                // Use entire donation
-                remainingQuantity -= donation.quantity;
-                donation.status = 'reserved';
-                await donation.save();
-                fulfilledBy.push(donation._id);
-            }
-            else {
-                // Use partial donation
-                donation.quantity -= remainingQuantity;
-                await donation.save();
-                // Create a new record for the allocated portion
-                const allocatedDonation = await BloodDonation_1.default.create({
-                    donor: donation.donor,
-                    bloodGroup: donation.bloodGroup,
-                    quantity: remainingQuantity,
-                    donationDate: donation.donationDate,
-                    expiryDate: donation.expiryDate,
-                    status: 'reserved',
-                    hospital: hospital,
-                });
-                fulfilledBy.push(allocatedDonation._id);
-                remainingQuantity = 0;
-            }
-        }
-        // Update request status based on fulfillment
-        if (remainingQuantity === 0) {
-            bloodRequest.status = 'fulfilled';
-            bloodRequest.fulfilledBy = fulfilledBy;
-            await bloodRequest.save();
-        }
-        else if (fulfilledBy.length > 0) {
-            bloodRequest.status = 'processing';
-            bloodRequest.fulfilledBy = fulfilledBy;
-            await bloodRequest.save();
-        }
+        const bloodRequestData = {
+            patientName: patientName.trim(),
+            patientAge: patientAgeNum,
+            bloodGroup: bloodGroup.trim(),
+            units: unitsNum,
+            hospital: hospital.trim(),
+            urgency: urgency || 'medium',
+            contactNumber: contactNumber.trim(),
+            reason: reason ? reason.trim() : undefined,
+            requestedBy: requestedById,
+            status: 'pending'
+        };
+        const bloodRequest = new BloodRequest_1.default(bloodRequestData);
+        await bloodRequest.save();
+        // Inventory management can be implemented here if needed
         res.status(201).json(bloodRequest);
     }
     catch (error) {
-        res.status(500).json({ message: error.message || 'Server error' });
+        console.error('Error creating blood request:', error);
+        // Provide more detailed error messages
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors || {}).map((err) => err.message);
+            return res.status(400).json({
+                message: 'Validation error',
+                errors: validationErrors
+            });
+        }
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                message: `Invalid data format: ${error.message}`
+            });
+        }
+        res.status(500).json({
+            message: error.message || 'Server error',
+            error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 exports.requestBlood = requestBlood;
@@ -200,15 +205,19 @@ exports.requestBlood = requestBlood;
  */
 const getBloodRequestById = async (req, res) => {
     try {
-        const bloodRequest = await BloodRequest_1.default.findById(req.params.id)
-            .populate('requester', 'name email phone')
-            .populate('fulfilledBy');
-        if (bloodRequest) {
-            res.json(bloodRequest);
+        const requestId = req.params?.id;
+        if (!requestId || !mongoose_1.Types.ObjectId.isValid(requestId)) {
+            return res.status(400).json({ message: 'Invalid blood request ID' });
         }
-        else {
-            res.status(404).json({ message: 'Blood request not found' });
+        const bloodRequest = await BloodRequest_1.default.findById(requestId)
+            .populate('requestedBy', 'name email')
+            .populate('processedBy', 'name email')
+            .lean()
+            .exec();
+        if (!bloodRequest) {
+            return res.status(404).json({ message: 'Blood request not found' });
         }
+        res.json(bloodRequest);
     }
     catch (error) {
         res.status(500).json({ message: error.message || 'Server error' });
@@ -225,8 +234,19 @@ const getUserBloodRequests = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authorized' });
         }
-        const bloodRequests = await BloodRequest_1.default.find({ requester: req.user._id })
-            .sort({ createdAt: -1 });
+        const user = req.user;
+        if (!user._id) {
+            return res.status(401).json({ message: 'User not authenticated' });
+        }
+        const userId = user._id instanceof mongoose_1.Types.ObjectId
+            ? user._id
+            : new mongoose_1.Types.ObjectId(String(user._id));
+        const bloodRequests = await BloodRequest_1.default.find({
+            requestedBy: userId
+        })
+            .sort({ createdAt: -1 })
+            .lean()
+            .exec();
         res.json(bloodRequests);
     }
     catch (error) {
@@ -242,7 +262,11 @@ exports.getUserBloodRequests = getUserBloodRequests;
 const updateBloodRequestStatus = async (req, res) => {
     try {
         const { status } = req.body;
-        const bloodRequest = await BloodRequest_1.default.findById(req.params.id);
+        const requestId = req.params?.id;
+        if (!requestId || !mongoose_1.Types.ObjectId.isValid(requestId)) {
+            return res.status(400).json({ message: 'Invalid blood request ID' });
+        }
+        const bloodRequest = await BloodRequest_1.default.findById(requestId);
         if (bloodRequest) {
             bloodRequest.status = status;
             // If request is fulfilled, update the blood donation status to used
@@ -270,4 +294,30 @@ const updateBloodRequestStatus = async (req, res) => {
     }
 };
 exports.updateBloodRequestStatus = updateBloodRequestStatus;
+/**
+ * Get all blood requests (Admin only)
+ * @route GET /api/blood-donation/request/all
+ * @access Private/Admin
+ */
+const getAllBloodRequests = async (req, res) => {
+    try {
+        const { status } = req.query;
+        const query = {};
+        if (status) {
+            query.status = status;
+        }
+        const bloodRequests = await BloodRequest_1.default.find(query)
+            .populate('requestedBy', 'name email')
+            .populate('processedBy', 'name email')
+            .sort({ createdAt: -1 })
+            .lean()
+            .exec();
+        res.json(bloodRequests);
+    }
+    catch (error) {
+        console.error('Error fetching blood requests:', error);
+        res.status(500).json({ message: error.message || 'Server error' });
+    }
+};
+exports.getAllBloodRequests = getAllBloodRequests;
 //# sourceMappingURL=bloodDonationController.js.map

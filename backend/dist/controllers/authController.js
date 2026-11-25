@@ -59,29 +59,35 @@ exports.registerUser = registerUser;
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-        // Find user by email
-        const user = await User_1.default.findOne({ email });
-        // Check if user exists and password matches
-        if (user && (await user.comparePassword(password))) {
-            // Explicitly type the _id as string
-            const userId = user._id.toString();
-            res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                phone: user.phone,
-                address: user.address,
-                bloodGroup: user.bloodGroup,
-                isDonor: user.isDonor,
-                token: (0, generateToken_1.default)(userId),
-            });
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required' });
         }
-        else {
-            res.status(401).json({ message: 'Invalid email or password' });
+        // Find user by email (case-insensitive)
+        const user = await User_1.default.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid email or password' });
         }
+        // Check if password matches
+        const isPasswordValid = await user.comparePassword(password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ message: 'Invalid email or password' });
+        }
+        // Explicitly type the _id as string
+        const userId = user._id.toString();
+        res.json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role || 'user',
+            phone: user.phone,
+            address: user.address,
+            bloodGroup: user.bloodGroup,
+            isDonor: user.isDonor,
+            token: (0, generateToken_1.default)(userId),
+        });
     }
     catch (error) {
+        console.error('Login error:', error);
         res.status(500).json({ message: error.message || 'Server error' });
     }
 };

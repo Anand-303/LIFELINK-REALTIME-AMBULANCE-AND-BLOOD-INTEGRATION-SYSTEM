@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Ambulance from '../models/Ambulance';
 import AmbulanceRequest from '../models/AmbulanceRequest';
 
@@ -129,6 +130,8 @@ export const requestAmbulance = async (req: Request, res: Response) => {
     const {
       patientName,
       patientPhone,
+      needsBlood,
+      urgency,
       pickupLocation,
       destination,
       emergencyDetails,
@@ -141,6 +144,8 @@ export const requestAmbulance = async (req: Request, res: Response) => {
       user: req.user._id,
       patientName,
       patientPhone,
+      needsBlood: !!needsBlood,
+      urgency: urgency || 'medium',
       pickupLocation,
       destination,
       emergencyDetails,
@@ -172,7 +177,11 @@ export const requestAmbulance = async (req: Request, res: Response) => {
  */
 export const getAmbulanceRequestById = async (req: Request, res: Response) => {
   try {
-    const ambulanceRequest = await AmbulanceRequest.findById(req.params.id)
+    const { id } = req.params as { id?: string };
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: 'Ambulance request not found' });
+    }
+    const ambulanceRequest = await AmbulanceRequest.findById(id)
       .populate('user', 'name email phone')
       .populate('ambulance');
 
@@ -195,7 +204,12 @@ export const updateAmbulanceRequestStatus = async (req: Request, res: Response) 
   try {
     const { status } = req.body;
 
-    const ambulanceRequest = await AmbulanceRequest.findById(req.params.id);
+    const { id } = req.params as { id?: string };
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: 'Ambulance request not found' });
+    }
+
+    const ambulanceRequest = await AmbulanceRequest.findById(id);
 
     if (ambulanceRequest) {
       ambulanceRequest.status = status;
@@ -268,8 +282,15 @@ export const getAllAmbulanceRequests = async (req: Request, res: Response) => {
  */
 export const allocateAmbulanceToRequest = async (req: Request, res: Response) => {
   try {
-    const { ambulanceId } = req.body as { ambulanceId: string };
-    const requestId = req.params.id;
+    const { ambulanceId } = req.body as { ambulanceId?: string };
+    const requestId = req.params.id as string | undefined;
+
+    if (!requestId || !mongoose.Types.ObjectId.isValid(requestId)) {
+      return res.status(404).json({ message: 'Ambulance request not found' });
+    }
+    if (!ambulanceId || !mongoose.Types.ObjectId.isValid(ambulanceId)) {
+      return res.status(404).json({ message: 'Ambulance not found' });
+    }
 
     const ambulanceRequest = await AmbulanceRequest.findById(requestId);
     if (!ambulanceRequest) {

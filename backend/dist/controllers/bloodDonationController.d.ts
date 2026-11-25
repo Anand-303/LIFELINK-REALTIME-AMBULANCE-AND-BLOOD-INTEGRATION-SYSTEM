@@ -34,7 +34,7 @@ export declare const requestBlood: (req: Request, res: Response) => Promise<Resp
  * @route GET /api/blood-donation/request/:id
  * @access Private
  */
-export declare const getBloodRequestById: (req: Request, res: Response) => Promise<void>;
+export declare const getBloodRequestById: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get user's blood requests
  * @route GET /api/blood-donation/request/user
@@ -46,5 +46,11 @@ export declare const getUserBloodRequests: (req: Request, res: Response) => Prom
  * @route PUT /api/blood-donation/request/:id/status
  * @access Private/Admin
  */
-export declare const updateBloodRequestStatus: (req: Request, res: Response) => Promise<void>;
+export declare const updateBloodRequestStatus: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Get all blood requests (Admin only)
+ * @route GET /api/blood-donation/request/all
+ * @access Private/Admin
+ */
+export declare const getAllBloodRequests: (req: Request, res: Response) => Promise<void>;
 //# sourceMappingURL=bloodDonationController.d.ts.map

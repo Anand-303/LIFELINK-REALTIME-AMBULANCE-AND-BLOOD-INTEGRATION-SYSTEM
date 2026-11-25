@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -54,7 +54,7 @@ const BloodRequestsAdmin: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       const data = await bloodDonationService.getBloodRequests();
@@ -70,11 +70,11 @@ const BloodRequestsAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     loadRequests();
-  }, [statusFilter]);
+  }, [loadRequests]);
 
   const handleStatusChange = (event: SelectChangeEvent) => {
     const value = event.target.value as 'pending' | 'approved' | 'fulfilled' | 'rejected';

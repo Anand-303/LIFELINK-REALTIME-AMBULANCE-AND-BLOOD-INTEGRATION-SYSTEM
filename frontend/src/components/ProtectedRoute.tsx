@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../redux/hooks';
 import { getUserProfile } from '../redux/slices/authSlice';
+import LoadingSpinner from './common/LoadingSpinner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,13 +13,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const { user, token, loading } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
   const location = useLocation();
+  /** Avoid dispatching getUserProfile in a tight loop if Redux and effect get out of sync */
+  const profileFetchStartedForToken = useRef<string | null>(null);
 
   useEffect(() => {
-    // If we have a token but no user, fetch the user profile
-    if (token && !user && !loading) {
+    if (!token) {
+      profileFetchStartedForToken.current = null;
+      return;
+    }
+    if (token && !user && profileFetchStartedForToken.current !== token) {
+      profileFetchStartedForToken.current = token;
       dispatch(getUserProfile());
     }
-  }, [dispatch, token, user, loading]);
+  }, [dispatch, token, user]);
 
   // If no token, redirect to login
   if (!token) {
@@ -27,12 +34,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
 
   // If still loading, show loading indicator
   if (loading) {
-    return <div>Loading...</div>;
+    return <LoadingSpinner message="Checking your session..." />;
   }
 
   // If we have role restrictions and the user doesn't have the required role
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // If all checks pass, render the children

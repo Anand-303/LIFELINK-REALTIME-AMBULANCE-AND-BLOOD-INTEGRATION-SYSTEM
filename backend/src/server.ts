@@ -12,6 +12,7 @@ import ambulanceRoutes from './routes/ambulance';
 import bloodDonationRoutes from './routes/bloodDonation';
 import bloodInventoryRoutes from './routes/bloodInventory';
 import campaignRoutes from './routes/campaign';
+import chatRoutes from './routes/chat';
 
 // Load environment variables
 dotenv.config();
@@ -27,12 +28,21 @@ app.use(express.urlencoded({ extended: true }));
 // Create HTTP server
 const server = http.createServer(app);
 
-// Initialize Socket.io
+// Socket.io CORS: in development allow common localhost ports (CRA may use 3001 if 3000 is taken)
+const socketCorsOrigins =
+  process.env.NODE_ENV === 'production'
+    ? process.env.CLIENT_URL || 'http://localhost:3000'
+    : [
+        process.env.CLIENT_URL,
+        'http://localhost:3000',
+        'http://localhost:3001',
+      ].filter((o): o is string => Boolean(o));
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
+    origin: socketCorsOrigins,
+    methods: ['GET', 'POST'],
+  },
 });
 
 // Socket.io connection
@@ -73,6 +83,7 @@ app.use('/api/ambulance', ambulanceRoutes);
 app.use('/api/blood-donation', bloodDonationRoutes);
 app.use('/api/blood-inventory', bloodInventoryRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api', chatRoutes);
 
 // MongoDB Connection
 mongoose

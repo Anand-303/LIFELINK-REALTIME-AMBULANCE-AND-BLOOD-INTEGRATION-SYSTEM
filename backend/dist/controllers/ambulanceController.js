@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserAmbulanceRequests = exports.updateAmbulanceRequestStatus = exports.getAmbulanceRequestById = exports.requestAmbulance = exports.updateAmbulanceStatus = exports.updateAmbulanceLocation = exports.createAmbulance = exports.getAmbulanceById = exports.getAmbulances = void 0;
+exports.deleteAmbulance = exports.allocateAmbulanceToRequest = exports.getAllAmbulanceRequests = exports.getUserAmbulanceRequests = exports.updateAmbulanceRequestStatus = exports.getAmbulanceRequestById = exports.requestAmbulance = exports.updateAmbulanceStatus = exports.updateAmbulanceLocation = exports.createAmbulance = exports.getAmbulanceById = exports.getAmbulances = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const Ambulance_1 = __importDefault(require("../models/Ambulance"));
 const AmbulanceRequest_1 = __importDefault(require("../models/AmbulanceRequest"));
 /**
@@ -126,13 +127,15 @@ const requestAmbulance = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authorized' });
         }
-        const { patientName, patientPhone, pickupLocation, destination, emergencyDetails, } = req.body;
+        const { patientName, patientPhone, needsBlood, urgency, pickupLocation, destination, emergencyDetails, } = req.body;
         // Find nearest available ambulance
         const nearestAmbulance = await Ambulance_1.default.findOne({ status: 'available' });
         const ambulanceRequest = await AmbulanceRequest_1.default.create({
             user: req.user._id,
             patientName,
             patientPhone,
+            needsBlood: !!needsBlood,
+            urgency: urgency || 'medium',
             pickupLocation,
             destination,
             emergencyDetails,
@@ -162,7 +165,11 @@ exports.requestAmbulance = requestAmbulance;
  */
 const getAmbulanceRequestById = async (req, res) => {
     try {
-        const ambulanceRequest = await AmbulanceRequest_1.default.findById(req.params.id)
+        const { id } = req.params;
+        if (!id || !mongoose_1.default.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ message: 'Ambulance request not found' });
+        }
+        const ambulanceRequest = await AmbulanceRequest_1.default.findById(id)
             .populate('user', 'name email phone')
             .populate('ambulance');
         if (ambulanceRequest) {
@@ -185,7 +192,11 @@ exports.getAmbulanceRequestById = getAmbulanceRequestById;
 const updateAmbulanceRequestStatus = async (req, res) => {
     try {
         const { status } = req.body;
-        const ambulanceRequest = await AmbulanceRequest_1.default.findById(req.params.id);
+        const { id } = req.params;
+        if (!id || !mongoose_1.default.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ message: 'Ambulance request not found' });
+        }
+        const ambulanceRequest = await AmbulanceRequest_1.default.findById(id);
         if (ambulanceRequest) {
             ambulanceRequest.status = status;
             // If request is completed or cancelled, free up the ambulance
@@ -231,4 +242,94 @@ const getUserAmbulanceRequests = async (req, res) => {
     }
 };
 exports.getUserAmbulanceRequests = getUserAmbulanceRequests;
+/**
+ * Get all ambulance requests (Admin only)
+ * @route GET /api/ambulance/request/all
+ * @access Private/Admin
+ */
+const getAllAmbulanceRequests = async (req, res) => {
+    try {
+        const ambulanceRequests = await AmbulanceRequest_1.default.find({})
+            .populate('user', 'name email phone')
+            .populate('ambulance')
+            .sort({ createdAt: -1 });
+        res.json(ambulanceRequests);
+    }
+    catch (error) {
+        res.status(500).json({ message: error.message || 'Server error' });
+    }
+};
+exports.getAllAmbulanceRequests = getAllAmbulanceRequests;
+/**
+ * Allocate a specific ambulance to a request (Admin)
+ * @route PUT /api/ambulance/request/:id/allocate
+ * @access Private/Admin
+ */
+const allocateAmbulanceToRequest = async (req, res) => {
+    try {
+        const { ambulanceId } = req.body;
+        const requestId = req.params.id;
+        if (!requestId || !mongoose_1.default.Types.ObjectId.isValid(requestId)) {
+            return res.status(404).json({ message: 'Ambulance request not found' });
+        }
+        if (!ambulanceId || !mongoose_1.default.Types.ObjectId.isValid(ambulanceId)) {
+            return res.status(404).json({ message: 'Ambulance not found' });
+        }
+        const ambulanceRequest = await AmbulanceRequest_1.default.findById(requestId);
+        if (!ambulanceRequest) {
+            return res.status(404).json({ message: 'Ambulance request not found' });
+        }
+        const ambulance = await Ambulance_1.default.findById(ambulanceId);
+        if (!ambulance) {
+            return res.status(404).json({ message: 'Ambulance not found' });
+        }
+        // If request already had an ambulance, free it
+        if (ambulanceRequest.ambulance) {
+            const prevAmbulance = await Ambulance_1.default.findById(ambulanceRequest.ambulance);
+            if (prevAmbulance) {
+                prevAmbulance.status = 'available';
+                prevAmbulance.currentRequest = null;
+                await prevAmbulance.save();
+            }
+        }
+        // Allocate the selected ambulance
+        ambulanceRequest.ambulance = ambulance._id;
+        if (ambulanceRequest.status === 'pending') {
+            ambulanceRequest.status = 'accepted';
+        }
+        await ambulanceRequest.save();
+        ambulance.status = 'busy';
+        ambulance.currentRequest = ambulanceRequest._id;
+        await ambulance.save();
+        const populated = await AmbulanceRequest_1.default.findById(requestId)
+            .populate('user', 'name email phone')
+            .populate('ambulance');
+        res.json(populated);
+    }
+    catch (error) {
+        res.status(500).json({ message: error.message || 'Server error' });
+    }
+};
+exports.allocateAmbulanceToRequest = allocateAmbulanceToRequest;
+/**
+ * Delete an ambulance (Admin only)
+ * @route DELETE /api/ambulance/:id
+ * @access Private/Admin
+ */
+const deleteAmbulance = async (req, res) => {
+    try {
+        const ambulance = await Ambulance_1.default.findById(req.params.id);
+        if (ambulance) {
+            await ambulance.deleteOne();
+            res.json({ message: 'Ambulance deleted successfully' });
+        }
+        else {
+            res.status(404).json({ message: 'Ambulance not found' });
+        }
+    }
+    catch (error) {
+        res.status(500).json({ message: error.message || 'Server error' });
+    }
+};
+exports.deleteAmbulance = deleteAmbulance;
 //# sourceMappingURL=ambulanceController.js.map

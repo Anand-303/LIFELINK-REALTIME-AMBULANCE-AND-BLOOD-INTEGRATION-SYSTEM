@@ -22,6 +22,8 @@ router.route('/request')
     .post(auth_1.protect, bloodDonationController_1.requestBlood);
 router.route('/request/user')
     .get(auth_1.protect, bloodDonationController_1.getUserBloodRequests);
+router.route('/request/all')
+    .get(auth_1.protect, auth_1.admin, bloodDonationController_1.getAllBloodRequests);
 router.route('/request/:id')
     .get(auth_1.protect, bloodDonationController_1.getBloodRequestById);
 router.route('/request/:id/status')

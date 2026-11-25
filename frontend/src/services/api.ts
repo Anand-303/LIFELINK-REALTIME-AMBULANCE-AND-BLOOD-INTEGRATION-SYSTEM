@@ -8,6 +8,8 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Prevent requests from hanging forever in the UI
+  timeout: 15000,
 });
 
 // Request interceptor for adding auth token
@@ -187,8 +189,16 @@ export const campaignService = {
     return response.data;
   },
   createCampaign: async (campaignData: any) => {
-    const response = await api.post('/campaigns', campaignData);
-    return response.data;
+    console.log('API: Creating campaign with data:', campaignData);
+    try {
+      const response = await api.post('/campaigns', campaignData);
+      console.log('API: Campaign create response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('API: Campaign create error:', error);
+      console.error('API: Campaign create error response:', error.response);
+      throw error;
+    }
   },
   updateCampaign: async (id: string, campaignData: any) => {
     const response = await api.put(`/campaigns/${id}`, campaignData);

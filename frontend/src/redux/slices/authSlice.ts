@@ -135,6 +135,10 @@ const authSlice = createSlice({
       .addCase(getUserProfile.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+        // Invalid/expired token or unreachable API: stop infinite retry in ProtectedRoute
+        state.user = null;
+        state.token = null;
+        localStorage.removeItem('token');
       })
       // Update user profile
       .addCase(updateUserProfile.pending, (state) => {

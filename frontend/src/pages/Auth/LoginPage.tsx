@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -21,6 +21,7 @@ import { login } from '../../redux/slices/authSlice';
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const location = useLocation();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -51,12 +52,26 @@ const LoginPage: React.FC = () => {
     try {
       const resultAction = await dispatch(login(formData));
       if (login.fulfilled.match(resultAction)) {
-        // Redirect based on user role
+        console.log('Login successful:', resultAction.payload);
+        
+        // Check if there's a redirect location from protected route
+        const state = location.state as { from?: Location };
+        const from = state?.from?.pathname || '/dashboard';
+        console.log('Redirecting to:', from);
+        
+        // Redirect based on user role and intended destination
         const user = resultAction.payload.user;
+        console.log('User role:', user?.role);
+        
         if (user && user.role === 'admin') {
+          console.log('Redirecting admin to /admin');
           navigate('/admin');
+        } else if (from === '/ambulance') {
+          console.log('Redirecting to /ambulance');
+          navigate('/ambulance');
         } else {
-          navigate('/dashboard');
+          console.log('Redirecting to:', from);
+          navigate(from);
         }
       } else if (login.rejected.match(resultAction)) {
         const errorMessage = resultAction.payload as string;

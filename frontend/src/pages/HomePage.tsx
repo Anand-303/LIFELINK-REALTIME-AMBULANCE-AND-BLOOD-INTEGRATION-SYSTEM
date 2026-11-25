@@ -32,23 +32,23 @@ const HomePage: React.FC = () => {
           <Box sx={{ mt: 4 }}>
             <Button 
               component={RouterLink} 
-              to="/ambulance" 
+              to="/book-ambulance" 
               variant="contained" 
               color="primary" 
               size="large"
               sx={{ mr: 2, mb: 2, px: 4, py: 1.5, borderRadius: '30px' }}
             >
-              Track Ambulance
+              Book Ambulance
             </Button>
             <Button 
               component={RouterLink} 
-              to="/blood-donation" 
+              to="/login" 
               variant="outlined" 
               color="secondary" 
               size="large"
               sx={{ mb: 2, px: 4, py: 1.5, borderRadius: '30px', color: 'white', borderColor: 'white' }}
             >
-              Donate Blood
+              Track Ambulance
             </Button>
           </Box>
         </Container>

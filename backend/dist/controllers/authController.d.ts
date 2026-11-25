@@ -10,7 +10,7 @@ export declare const registerUser: (req: Request, res: Response) => Promise<Resp
  * @route POST /api/auth/login
  * @access Public
  */
-export declare const loginUser: (req: Request, res: Response) => Promise<void>;
+export declare const loginUser: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get user profile
  * @route GET /api/auth/profile

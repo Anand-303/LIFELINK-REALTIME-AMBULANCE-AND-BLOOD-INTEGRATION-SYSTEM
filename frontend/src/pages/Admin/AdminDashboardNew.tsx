@@ -37,8 +37,6 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
-  LocalHospital as HospitalIcon,
-  Person as PersonIcon,
   Bloodtype as BloodIcon,
   Campaign as CampaignIcon,
   DirectionsCar as AmbulanceIcon,
@@ -46,7 +44,6 @@ import {
 } from '@mui/icons-material';
 import { useAppSelector } from '../../redux/hooks';
 import { ambulanceService, bloodDonationService, campaignService, bloodInventoryService } from '../../services/api';
-import * as campaignServiceImport from '../../services/campaignService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -91,6 +88,8 @@ interface AmbulanceRequest {
   };
   patientName: string;
   patientPhone?: string;
+  needsBlood?: boolean;
+  urgency?: 'low' | 'medium' | 'critical';
   pickupLocation: {
     address: string;
     latitude: number;
@@ -135,12 +134,27 @@ interface Ambulance {
     phone: string;
   };
   location?: {
-    latitude: number;
-    longitude: number;
+    latitude?: number;
+    longitude?: number;
     updatedAt: Date;
   };
   status: string;
   capacity?: number;
+}
+
+interface AmbulanceFormData {
+  registrationNumber: string;
+  capacity: number;
+  driver: {
+    name: string;
+    phone: string;
+  };
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    updatedAt?: Date;
+  };
+  status: string;
 }
 
 interface Campaign {
@@ -149,8 +163,8 @@ interface Campaign {
   description: string;
   location: {
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude?: number;
+    longitude?: number;
   };
   startDate: string;
   endDate: string;
@@ -178,7 +192,7 @@ const AdminDashboardNew: React.FC = () => {
   const [loadingAmbulances, setLoadingAmbulances] = useState(true);
   const [selectedAmbulance, setSelectedAmbulance] = useState<Ambulance | null>(null);
   const [openAmbulanceDialog, setOpenAmbulanceDialog] = useState(false);
-  const [ambulanceFormData, setAmbulanceFormData] = useState({
+  const [ambulanceFormData, setAmbulanceFormData] = useState<AmbulanceFormData>({
     registrationNumber: '',
     capacity: 4,
     driver: {
@@ -187,7 +201,8 @@ const AdminDashboardNew: React.FC = () => {
     },
     location: {
       latitude: 0,
-      longitude: 0
+      longitude: 0,
+      updatedAt: new Date()
     },
     status: 'available'
   });
@@ -201,11 +216,9 @@ const AdminDashboardNew: React.FC = () => {
     title: '',
     description: '',
     address: '',
-    latitude: 0,
-    longitude: 0,
     startDate: '',
     endDate: '',
-    bloodGroupsNeeded: [] as string[],
+    bloodGroupsNeeded: '',
     image: ''
   });
   
@@ -252,10 +265,18 @@ const AdminDashboardNew: React.FC = () => {
     setLoadingAmbulanceRequests(true);
     try {
       const response = await ambulanceService.getAllAmbulanceRequests();
-      setAmbulanceRequests(response);
-    } catch (err) {
+      setAmbulanceRequests(Array.isArray(response) ? response : []);
+      if (!Array.isArray(response)) {
+        console.warn('Unexpected ambulance requests response shape:', response);
+      }
+    } catch (err: any) {
       console.error('Error loading ambulance requests:', err);
-      setError('Failed to load ambulance requests. Please try again.');
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to load ambulance requests. Please try again.';
+      setError(message);
     } finally {
       setLoadingAmbulanceRequests(false);
     }
@@ -356,7 +377,7 @@ const AdminDashboardNew: React.FC = () => {
           name: ambulance.driver.name,
           phone: ambulance.driver.phone
         },
-        location: ambulance.location || { latitude: 0, longitude: 0 },
+        location: ambulance.location || { latitude: 0, longitude: 0, updatedAt: new Date() },
         status: ambulance.status
       });
     } else {
@@ -370,7 +391,8 @@ const AdminDashboardNew: React.FC = () => {
         },
         location: {
           latitude: 0,
-          longitude: 0
+          longitude: 0,
+          updatedAt: new Date()
         },
         status: 'available'
       });
@@ -444,7 +466,7 @@ const AdminDashboardNew: React.FC = () => {
   const loadCampaigns = async () => {
     setLoadingCampaigns(true);
     try {
-      const response = await campaignServiceImport.getCampaigns();
+      const response = await campaignService.getAllCampaigns();
       setCampaigns(response);
     } catch (err) {
       console.error('Error loading campaigns:', err);
@@ -492,20 +514,23 @@ const AdminDashboardNew: React.FC = () => {
   };
   
   const handleSaveBloodInventory = async () => {
-    try {
-      const result = await bloodInventoryService.updateBloodInventory(
-        bloodInventoryFormData.bloodGroup,
-        Number(bloodInventoryFormData.units)
-      );
-      setSuccessMessage(result.message || 'Blood inventory updated successfully');
-      handleCloseBloodInventoryDialog();
-      loadBloodInventory();
-    } catch (err: any) {
-      console.error('Error saving blood inventory:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to save blood inventory. Please try again.';
-      setError(errorMessage);
-    }
-  };
+  try {
+    console.log('Saving blood inventory:', bloodInventoryFormData);
+    const result = await bloodInventoryService.updateBloodInventory(
+      bloodInventoryFormData.bloodGroup,
+      Number(bloodInventoryFormData.units)
+    );
+    console.log('Blood inventory save result:', result);
+    setSuccessMessage(result.message || result.data?.message || 'Blood inventory updated successfully');
+    handleCloseBloodInventoryDialog();
+    loadBloodInventory();
+  } catch (err: any) {
+    console.error('Error saving blood inventory:', err);
+    console.error('Error response:', err.response?.data);
+    const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to save blood inventory. Please try again.';
+    setError(errorMessage);
+  }
+};
   
   // Campaign management
   const handleOpenCampaignDialog = (campaign?: Campaign) => {
@@ -515,11 +540,9 @@ const AdminDashboardNew: React.FC = () => {
         title: campaign.title,
         description: campaign.description,
         address: campaign.location.address,
-        latitude: campaign.location.latitude,
-        longitude: campaign.location.longitude,
         startDate: new Date(campaign.startDate).toISOString().split('T')[0],
         endDate: new Date(campaign.endDate).toISOString().split('T')[0],
-        bloodGroupsNeeded: campaign.bloodGroupsNeeded,
+        bloodGroupsNeeded: campaign.bloodGroupsNeeded.join(', '),
         image: campaign.image || ''
       });
     } else {
@@ -528,11 +551,9 @@ const AdminDashboardNew: React.FC = () => {
         title: '',
         description: '',
         address: '',
-        latitude: 0,
-        longitude: 0,
         startDate: '',
         endDate: '',
-        bloodGroupsNeeded: [],
+        bloodGroupsNeeded: '',
         image: ''
       });
     }
@@ -552,59 +573,92 @@ const AdminDashboardNew: React.FC = () => {
   };
   
   const handleSaveCampaign = async () => {
+    console.log('Starting campaign save...');
+    console.log('Campaign form data:', campaignFormData);
+    console.log('Selected campaign:', selectedCampaign);
+    console.log('User:', user);
+    
+    // Check if user is authenticated and is admin
+    if (!user) {
+      setError('You must be logged in to create campaigns');
+      return;
+    }
+    
+    if (user.role !== 'admin') {
+      setError('You must be an admin to create campaigns');
+      return;
+    }
+    
+    // Validate required fields
+    if (!campaignFormData.title || !campaignFormData.description || !campaignFormData.address || !campaignFormData.startDate || !campaignFormData.endDate) {
+      setError('Please fill in all required fields');
+      return;
+    }
+    
     try {
-      const token = localStorage.getItem('token') || '';
       if (selectedCampaign) {
+        console.log('Updating existing campaign...');
         // Update existing campaign
-        await campaignServiceImport.updateCampaign(
-          selectedCampaign._id,
-          {
-            title: campaignFormData.title,
-            description: campaignFormData.description,
-            location: {
-              address: campaignFormData.address,
-              latitude: campaignFormData.latitude,
-              longitude: campaignFormData.longitude
-            },
-            startDate: new Date(campaignFormData.startDate),
-            endDate: new Date(campaignFormData.endDate),
-            bloodGroupsNeeded: campaignFormData.bloodGroupsNeeded,
-            image: campaignFormData.image
+        const updateData = {
+          title: campaignFormData.title,
+          description: campaignFormData.description,
+          location: {
+            address: campaignFormData.address
           },
-          token
+          startDate: new Date(campaignFormData.startDate),
+          endDate: new Date(campaignFormData.endDate),
+          bloodGroupsNeeded:  campaignFormData.bloodGroupsNeeded.split(',').map(bg => bg.trim()).filter(bg => bg),
+          image: campaignFormData.image
+        };
+        console.log('Update data:', updateData);
+        
+        await campaignService.updateCampaign(
+          selectedCampaign._id,
+          updateData
         );
         setSuccessMessage('Campaign updated successfully');
       } else {
+        console.log('Creating new campaign...');
         // Create new campaign
-        await campaignServiceImport.createCampaign(
-          campaignFormData.title,
-          campaignFormData.description,
-          {
-            address: campaignFormData.address,
-            latitude: campaignFormData.latitude,
-            longitude: campaignFormData.longitude
+        const createData = {
+          title: campaignFormData.title,
+          description: campaignFormData.description,
+          location: {
+            address: campaignFormData.address
           },
-          new Date(campaignFormData.startDate),
-          new Date(campaignFormData.endDate),
-          campaignFormData.bloodGroupsNeeded,
-          token,
-          campaignFormData.image
-        );
+          startDate: new Date(campaignFormData.startDate),
+          endDate: new Date(campaignFormData.endDate),
+          bloodGroupsNeeded: campaignFormData.bloodGroupsNeeded.split(',').map(bg => bg.trim()).filter(bg => bg),
+          image: campaignFormData.image
+        };
+        console.log('Create data:', createData);
+        
+        const result = await campaignService.createCampaign(createData);
+        console.log('Create result:', result);
         setSuccessMessage('Campaign created successfully');
       }
       handleCloseCampaignDialog();
       loadCampaigns();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving campaign:', err);
-      setError('Failed to save campaign. Please try again.');
+      console.error('Error response:', err.response);
+      console.error('Error status:', err.response?.status);
+      console.error('Error data:', err.response?.data);
+      
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please log in again.');
+      } else if (err.response?.status === 403) {
+        setError('You do not have permission to create campaigns. Admin access required.');
+      } else {
+        setError(`Failed to save campaign: ${err.response?.data?.message || err.message || 'Unknown error'}`);
+      }
     }
   };
   
   const handleDeleteCampaign = async (campaignId: string) => {
     if (window.confirm('Are you sure you want to delete this campaign?')) {
       try {
-        const token = localStorage.getItem('token') || '';
-        await campaignServiceImport.deleteCampaign(campaignId, token);
+        await campaignService.deleteCampaign(campaignId);
         setSuccessMessage('Campaign deleted successfully');
         loadCampaigns();
       } catch (err) {
@@ -652,6 +706,11 @@ const AdminDashboardNew: React.FC = () => {
       <Typography variant="h4" gutterBottom>
         Admin Dashboard
       </Typography>
+      {user && (
+        <Typography variant="body2" color="textSecondary" gutterBottom>
+          Logged in as: {user.name} ({user.role})
+        </Typography>
+      )}
       <Typography variant="body1" color="textSecondary" gutterBottom>
         Manage ambulance requests, blood requests, and ambulance fleet
       </Typography>
@@ -753,6 +812,8 @@ const AdminDashboardNew: React.FC = () => {
                   <TableCell>Contact</TableCell>
                   <TableCell>Pickup Location</TableCell>
                   <TableCell>Destination</TableCell>
+                  <TableCell>Need Blood</TableCell>
+                  <TableCell>Urgency</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Date</TableCell>
                   <TableCell align="right">Actions</TableCell>
@@ -766,6 +827,14 @@ const AdminDashboardNew: React.FC = () => {
                     <TableCell>{request.patientPhone || request.user?.phone || 'N/A'}</TableCell>
                     <TableCell>{request.pickupLocation.address}</TableCell>
                     <TableCell>{request.destination?.address || 'N/A'}</TableCell>
+                    <TableCell>{request.needsBlood ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={request.urgency || 'medium'}
+                        color={(request.urgency || 'medium') === 'critical' ? 'error' : (request.urgency || 'medium') === 'medium' ? 'warning' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
                     <TableCell>
                       <Chip 
                         label={request.status} 
@@ -1304,28 +1373,6 @@ const AdminDashboardNew: React.FC = () => {
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
-                  name="latitude"
-                  label="Latitude"
-                  type="number"
-                  fullWidth
-                  value={campaignFormData.latitude}
-                  onChange={handleCampaignFormChange}
-                  inputProps={{ step: "any" }}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  name="longitude"
-                  label="Longitude"
-                  type="number"
-                  fullWidth
-                  value={campaignFormData.longitude}
-                  onChange={handleCampaignFormChange}
-                  inputProps={{ step: "any" }}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
                   name="startDate"
                   label="Start Date"
                   type="date"
@@ -1365,15 +1412,15 @@ const AdminDashboardNew: React.FC = () => {
                   name="bloodGroupsNeeded"
                   label="Blood Groups"
                   fullWidth
-                  value={campaignFormData.bloodGroupsNeeded.join(', ')}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCampaignFormData({
-                      ...campaignFormData,
-                      bloodGroupsNeeded: value.split(',').map(bg => bg.trim()).filter(bg => bg)
-                    });
-                  }}
+                  value={campaignFormData.bloodGroupsNeeded}
+                  onChange={handleCampaignFormChange}
                   placeholder="A+, B+, O-, AB+"
+                  inputProps={{
+                    autoComplete: 'off',
+                    autoCorrect: 'off',
+                    autoCapitalize: 'off',
+                    spellCheck: 'false'
+                  }}
                 />
               </Grid>
             </Grid>

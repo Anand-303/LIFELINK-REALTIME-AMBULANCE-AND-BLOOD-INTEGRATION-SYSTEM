@@ -42,17 +42,25 @@ export interface AmbulanceRequest {
   user: User | string;
   patientName: string;
   patientContact: string;
+  patientPhone?: string;
+  needsBlood?: boolean;
+  urgency?: 'low' | 'medium' | 'critical';
   pickupLocation: {
     address: string;
     latitude: number;
     longitude: number;
+  };
+  destination?: {
+    address: string;
+    latitude?: number;
+    longitude?: number;
   };
   destinationLocation?: {
     address: string;
     latitude: number;
     longitude: number;
   };
-  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'in-progress' | 'completed' | 'cancelled';
   ambulance?: Ambulance | string;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +95,16 @@ export interface BloodRequest {
   requiredDate?: string | Date;
   createdAt: string;
   updatedAt: string;
+}
+
+// Map & Places types (for Life Link map and nearby hospitals)
+export interface HospitalPlace {
+  placeId: string;
+  name: string;
+  vicinity?: string;
+  lat: number;
+  lng: number;
+  rating?: number;
 }
 
 // Campaign types

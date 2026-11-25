@@ -1,4 +1,4 @@
-import MuiGrid, { GridProps as MuiGridProps, GridTypeMap } from '@mui/material/Grid';
+import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid';
 import { styled } from '@mui/material/styles';
 import { SxProps, Theme } from '@mui/material';
 

@@ -34,19 +34,13 @@ import {
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useAppSelector } from '../../redux/hooks';
-import { getBloodInventory, getDonors, registerAsDonor, getUserBloodRequests } from '../../services/bloodDonationService';
+import { getBloodInventory, getDonors, registerAsDonor } from '../../services/bloodDonationService';
 import { bloodDonationService } from '../../services/api';
 import Grid from '../../components/CustomGrid';
 import { 
-  BloodInventoryItem as BloodInventoryItemType,
   BloodRequest as BloodRequestType,
-  Donor as DonorType,
-  SnackbarState as SnackbarStateType,
   TabPanelProps as TabPanelPropsType
 } from '../../types/bloodDonation';
-
-// MUI Imports
-import { styled } from '@mui/material/styles';
 
 
 interface BloodRequestFormProps {
@@ -422,7 +416,6 @@ const BloodRequestForm: React.FC<BloodRequestFormProps> = ({ open, onClose, onSu
   );
 };
 
-// Using imported BloodInventoryItemType
 interface BloodInventoryItem {
   _id: string;
   bloodGroup: string;
@@ -441,8 +434,6 @@ interface BloodInventoryItem {
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleString();
 };
-
-// Using imported TabPanelPropsType
 
 function TabPanel(props: TabPanelPropsType) {
   const { children, value, index, ...other } = props;
@@ -471,7 +462,6 @@ function a11yProps(index: number) {
   };
 }
 
-// Using imported BloodRequestType
 interface BloodRequest {
   _id: string;
   patientName: string;
@@ -487,7 +477,6 @@ interface BloodRequest {
   updatedAt: string;
 }
 
-// Using imported SnackbarStateType
 interface SnackbarState {
   open: boolean;
   message: string;
@@ -508,14 +497,8 @@ const BloodDonationPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [loadingDonors, setLoadingDonors] = useState(true);
-  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [, setLoadingInventory] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [lastError, setLastError] = useState<{
-    message: string;
-    status?: number;
-    details?: any;
-  } | null>(null);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -594,6 +577,8 @@ const BloodDonationPage: React.FC = () => {
         if (isMounted) {
           setError('Failed to load data. Please try again.');
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -643,39 +628,6 @@ const BloodDonationPage: React.FC = () => {
         severity: 'error'
       });
     }
-  };
-
-  // Function to submit blood request
-  const submitBlRequest = async (data: {
-    patientName: string;
-    patientAge: number;
-    bloodGroup: string;
-    units: number;
-    hospital: string;
-    urgency: 'low' | 'medium' | 'high' | 'critical';
-    contactNumber: string;
-    reason?: string;
-  }): Promise<void> => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('Authentication required');
-    }
-
-    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/blood-requests`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to submit blood request');
-    }
-
-    return response.json();
   };
 
   // Function to fetch user's blood requests with enhanced error handling
@@ -1060,64 +1012,6 @@ const BloodDonationPage: React.FC = () => {
     );
   };
 
-  if (error) {
-    const renderError = () => (
-      <Box sx={{ p: 2 }}>
-        <Alert 
-          severity="error" 
-          sx={{ mb: 2 }}
-          action={
-            <Button 
-              color="inherit" 
-              size="small"
-              onClick={() => {
-                const loadData = async () => {
-                  try {
-                    setLoading(true);
-                    setError(null);
-                    const data = await fetchUserBloodRequests();
-                    setRequests(data);
-                  } catch (err) {
-                    const error = err as Error;
-                    setError(error.message);
-                  } finally {
-                    setLoading(false);
-                  }
-                };
-
-                const handleRetry = () => {
-                  setError(null);
-                  setLoading(true);
-                  loadData();
-                  setRetryCount(prev => prev + 1);
-                };
-
-                handleRetry();
-              }}
-            >
-              Retry
-            </Button>
-          }
-        >
-          <Box>
-            <Typography variant="subtitle2">Failed to load data</Typography>
-            <Typography variant="body2">{error}</Typography>
-            {lastError?.status && (
-              <Typography variant="caption" display="block">
-                Status: {lastError.status}
-              </Typography>
-            )}
-            {lastError?.details && (
-              <Typography variant="caption" display="block">
-                {JSON.stringify(lastError.details, null, 2)}
-              </Typography>
-            )}
-          </Box>
-        </Alert>
-      </Box>
-    );
-  }
-
   const handleCloseRequestDialog = () => {
     setOpenRequestDialog(false);
   };
@@ -1168,7 +1062,12 @@ const BloodDonationPage: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ width: '100%', mt: 3, mb: 4 }}>
+      <Box sx={{ width: '100%', mt: 3, mb: 4, opacity: loading ? 0.92 : 1, transition: 'opacity 0.2s' }}>
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <CircularProgress size={28} aria-label="Loading page data" />
+          </Box>
+        )}
         <Typography variant="h4" component="h1" gutterBottom>
           Blood Donation & Requests
         </Typography>
