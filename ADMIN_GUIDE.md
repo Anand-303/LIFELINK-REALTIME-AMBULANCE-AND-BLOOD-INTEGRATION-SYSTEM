@@ -8,11 +8,22 @@ The admin dashboard provides comprehensive management capabilities for the ambul
 
 ## Admin Login
 
+### Default Admin Credentials
+- **Email**: `admin@mediconnect.com`
+- **Password**: `admin123`
+
 ### Creating an Admin Account
 Admins can be created in two ways:
 
-1. **Database Direct Creation**: Manually create a user in MongoDB with `role: "admin"`
-2. **Existing User Upgrade**: Update an existing user's role to "admin" in the database
+1. **Using the create-admin script** (Recommended):
+   ```bash
+   cd backend
+   npm run create-admin
+   ```
+   This will create an admin user with the default credentials above.
+
+2. **Database Direct Creation**: Manually create a user in MongoDB with `role: "admin"`
+3. **Existing User Upgrade**: Update an existing user's role to "admin" in the database
 
 ### Login Process
 1. Navigate to `/login`
